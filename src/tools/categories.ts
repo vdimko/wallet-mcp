@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { walletRequest } from "../client.js";
-import { runTool } from "../format.js";
+import { runTool, requestToken } from "../format.js";
 import { pagination, colorHint, uuid } from "../schemas.js";
 
 const CARDINALITY = ["none", "must", "need", "want"] as const;
@@ -25,7 +25,8 @@ export function registerCategoryTools(server: McpServer): void {
       description: "List spending categories, including both system (built-in) and custom categories.",
       inputSchema: { ...pagination },
     },
-    async ({ limit, offset }) => runTool(() => walletRequest("GET", "/categories", { query: { limit, offset } })),
+    async ({ limit, offset }, extra) =>
+      runTool(() => walletRequest("GET", "/categories", { token: requestToken(extra), query: { limit, offset } })),
   );
 
   server.registerTool(
@@ -35,7 +36,7 @@ export function registerCategoryTools(server: McpServer): void {
       description: "Fetch a single category by ID.",
       inputSchema: { id: uuid.describe("Category ID.") },
     },
-    async ({ id }) => runTool(() => walletRequest("GET", `/categories/${id}`)),
+    async ({ id }, extra) => runTool(() => walletRequest("GET", `/categories/${id}`, { token: requestToken(extra) })),
   );
 
   server.registerTool(
@@ -50,7 +51,8 @@ export function registerCategoryTools(server: McpServer): void {
         cardinality: z.enum(CARDINALITY).optional(),
       },
     },
-    async (input) => runTool(() => walletRequest("POST", "/categories/custom", { body: input })),
+    async (input, extra) =>
+      runTool(() => walletRequest("POST", "/categories/custom", { token: requestToken(extra), body: input })),
   );
 
   server.registerTool(
@@ -68,7 +70,8 @@ export function registerCategoryTools(server: McpServer): void {
           .describe("Up to 10 partial category updates, each with an id."),
       },
     },
-    async ({ categories }) => runTool(() => walletRequest("PATCH", "/categories", { body: categories })),
+    async ({ categories }, extra) =>
+      runTool(() => walletRequest("PATCH", "/categories", { token: requestToken(extra), body: categories })),
   );
 
   server.registerTool(
@@ -83,8 +86,10 @@ export function registerCategoryTools(server: McpServer): void {
         ids: z.array(uuid).min(1).max(10).describe("Up to 10 custom category IDs to delete."),
       },
     },
-    async ({ ids }) =>
-      runTool(() => walletRequest("DELETE", "/v1/api/categories", { query: { id: ids.join(",") } })),
+    async ({ ids }, extra) =>
+      runTool(() =>
+        walletRequest("DELETE", "/v1/api/categories", { token: requestToken(extra), query: { id: ids.join(",") } }),
+      ),
   );
 
   server.registerTool(
@@ -95,6 +100,7 @@ export function registerCategoryTools(server: McpServer): void {
         "List entities (records, budgets, etc.) that reference a category — useful to check before deleting it.",
       inputSchema: { id: uuid.describe("Category ID to check.") },
     },
-    async ({ id }) => runTool(() => walletRequest("GET", "/categories/references", { query: { id } })),
+    async ({ id }, extra) =>
+      runTool(() => walletRequest("GET", "/categories/references", { token: requestToken(extra), query: { id } })),
   );
 }

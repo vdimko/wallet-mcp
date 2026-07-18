@@ -1,6 +1,6 @@
 # wallet-mcp
 
-A local [MCP](https://modelcontextprotocol.io) server for the [BudgetBakers Wallet](https://budgetbakers.com/) REST API. Runs as a stdio subprocess — no network listener of its own.
+An [MCP](https://modelcontextprotocol.io) server for the [BudgetBakers Wallet](https://budgetbakers.com/) REST API. Runs as a persistent HTTP service using MCP's [Streamable HTTP](https://modelcontextprotocol.io/docs/concepts/transports#streamable-http) transport — meant to be run as a long-lived background process (e.g. via systemd) that MCP clients connect to over the network, rather than a stdio subprocess a client spawns itself.
 
 Covers Records (transactions), Accounts, Categories, and Budgets. Labels have no dedicated read/write endpoints in the Wallet API, so they're only usable as `labelIds` on records/budgets.
 
@@ -8,7 +8,7 @@ Covers Records (transactions), Accounts, Categories, and Budgets. Labels have no
 
 - Node.js 18 or newer (`node --version`)
 - A [BudgetBakers Wallet](https://budgetbakers.com/) account on the **Premium** plan — the REST API isn't available on the free plan
-- An MCP-compatible client: [Claude Code](https://docs.claude.com/en/docs/claude-code), Claude Desktop, or any other MCP client
+- An MCP client that supports Streamable HTTP transport (Claude Code, or any custom MCP client)
 
 ## Setup
 
@@ -19,42 +19,63 @@ npm install
 npm run build
 ```
 
-Generate an API token at https://web.budgetbakers.com/settings/rest-api. Keep it secret —
-don't commit it, paste it into a shared config file, or pass it as a bare CLI argument.
-It's provided to the server via the `WALLET_API_TOKEN` environment variable, as shown below.
+Generate an API token at https://web.budgetbakers.com/settings/rest-api — keep it secret,
+don't commit it anywhere. Unlike a typical stdio MCP server, **the token is not configured
+on the server at all**: each MCP client sends its own token per request via the standard
+`Authorization: Bearer <token>` HTTP header, and the server forwards it straight through to
+the Wallet API. This lets multiple callers/agents share one running instance, each using
+their own Wallet account. (If you do want a single fixed token for every caller instead,
+set `WALLET_API_TOKEN` in the server's environment — it's used as a fallback whenever a
+request has no `Authorization` header.)
+
+## Running it
+
+```bash
+npm start
+```
+
+By default it listens on `http://127.0.0.1:7691/mcp` — loopback only, not reachable from
+the network, since it's designed to be called by other processes/agents on the same
+machine. Override with the `WALLET_MCP_HOST` / `WALLET_MCP_PORT` env vars if needed.
+
+### As a background service (systemd)
+
+A ready-to-adapt unit is in [`systemd/wallet-mcp.service.example`](systemd/wallet-mcp.service.example).
+To install as a per-user service (no root required):
+
+```bash
+cp systemd/wallet-mcp.service.example ~/.config/systemd/user/wallet-mcp.service
+# edit the paths inside to match where you cloned the repo
+systemctl --user daemon-reload
+systemctl --user enable --now wallet-mcp.service
+loginctl enable-linger "$USER"   # keeps it running after you log out
+```
+
+Check it's up: `systemctl --user status wallet-mcp.service` and `curl -s -X POST
+http://127.0.0.1:7691/mcp -H 'Content-Type: application/json' -H 'Accept:
+application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
+
+⚠️ If you ever change the bind host to something other than `127.0.0.1` (e.g. to allow
+access from other machines), put it behind a firewall/VPN — the server has no
+authentication of its own beyond forwarding whatever `Authorization` header it receives.
 
 ## Register with an MCP client
 
 ### Claude Code
 
 ```bash
-claude mcp add wallet -- env WALLET_API_TOKEN=<your_token> node /absolute/path/to/wallet-mcp/dist/index.js
+claude mcp add --transport http wallet http://127.0.0.1:7691/mcp \
+  --header "Authorization: Bearer <your_token>"
 ```
 
 Verify it's connected with `claude mcp list`, then ask Claude something like *"list my
 Wallet accounts"* to confirm it can reach the API.
 
-### Claude Desktop / other JSON-config clients
+### Other MCP clients
 
-Add a `wallet` entry to the client's MCP server config (for Claude Desktop:
-`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or
-`%APPDATA%\Claude\claude_desktop_config.json` on Windows):
-
-```json
-{
-  "mcpServers": {
-    "wallet": {
-      "command": "node",
-      "args": ["/absolute/path/to/wallet-mcp/dist/index.js"],
-      "env": {
-        "WALLET_API_TOKEN": "<your_token>"
-      }
-    }
-  }
-}
-```
-
-Restart the client after editing the config so it picks up the new server.
+Point the client at `http://127.0.0.1:7691/mcp` using Streamable HTTP transport, and
+configure it to send `Authorization: Bearer <your_token>` with each request — consult
+your client's docs for where custom headers are set on an HTTP MCP server entry.
 
 ## Tools
 
@@ -86,24 +107,27 @@ Restart the client after editing the config so it picks up the new server.
 - Batch write endpoints (`POST`/`PATCH`/`DELETE` with multiple items) can return HTTP 207
   with a mix of per-item successes and failures; that's returned as normal tool output,
   not an error.
-- Wallet rate-limits at 300 requests/hour. Tool responses append a warning once the
-  `X-RateLimit-Remaining` header drops to 5 or below.
+- Wallet rate-limits at 300 requests/hour **per token**. Tool responses append a warning
+  once the `X-RateLimit-Remaining` header drops to 5 or below.
 - Filter parameters on `wallet_list_records` accept the API's `gte.`/`lte.`/`contains.`/
   `contains-i.` prefix syntax (e.g. `"gte.100"`), or a plain value for exact match.
+- Each MCP request is stateless: the server doesn't persist sessions between calls, so
+  there's nothing to clean up if a client disconnects mid-conversation.
 
 ## Troubleshooting
 
-- **"WALLET_API_TOKEN environment variable is not set"** — the `env` block (or `env
-  WALLET_API_TOKEN=... node ...` prefix) isn't reaching the server process. Double-check
-  it's set on the MCP server entry itself, not just your shell.
-- **HTTP 401 from the API** — token is invalid, expired, or was revoked; generate a new
-  one at https://web.budgetbakers.com/settings/rest-api.
+- **"No Wallet API token available"** — neither the request's `Authorization` header nor
+  the server's `WALLET_API_TOKEN` env var provided a token. Check your client is sending
+  the header on every request, not just at connection time.
+- **HTTP 401/404 from the API with a token set** — token is invalid, expired, or was
+  revoked; generate a new one at https://web.budgetbakers.com/settings/rest-api.
 - **HTTP 403 / a "Premium required" style message** — the REST API needs an active
   Wallet Premium subscription.
 - **HTTP 429** — you've hit the 300 requests/hour limit; wait for it to reset or reduce
   call frequency.
-- **Server doesn't show up in the client** — confirm `npm run build` succeeded (there
-  should be a `dist/index.js`) and that the path in your config is absolute, not relative.
+- **Client can't connect** — confirm the service is actually running (`systemctl --user
+  status wallet-mcp.service` or `curl` the `/mcp` endpoint) and that the client is
+  configured for Streamable HTTP, not stdio.
 
 ## Development
 

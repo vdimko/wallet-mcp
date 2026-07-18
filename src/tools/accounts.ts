@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { walletRequest } from "../client.js";
-import { runTool } from "../format.js";
+import { runTool, requestToken } from "../format.js";
 import { pagination, colorHint, uuid } from "../schemas.js";
 
 const ACCOUNT_TYPES = ["General", "Cash", "CurrentAccount", "SavingAccount", "Insurance"] as const;
@@ -24,7 +24,8 @@ export function registerAccountTools(server: McpServer): void {
       description: "List financial accounts (cash, bank, savings, etc). Supports pagination.",
       inputSchema: { ...pagination },
     },
-    async ({ limit, offset }) => runTool(() => walletRequest("GET", "/accounts", { query: { limit, offset } })),
+    async ({ limit, offset }, extra) =>
+      runTool(() => walletRequest("GET", "/accounts", { token: requestToken(extra), query: { limit, offset } })),
   );
 
   server.registerTool(
@@ -34,7 +35,7 @@ export function registerAccountTools(server: McpServer): void {
       description: "Fetch a single account by ID.",
       inputSchema: { id: uuid.describe("Account ID.") },
     },
-    async ({ id }) => runTool(() => walletRequest("GET", `/accounts/${id}`)),
+    async ({ id }, extra) => runTool(() => walletRequest("GET", `/accounts/${id}`, { token: requestToken(extra) })),
   );
 
   server.registerTool(
@@ -50,7 +51,7 @@ export function registerAccountTools(server: McpServer): void {
         color: z.string().optional().describe(colorHint),
       },
     },
-    async (input) => runTool(() => walletRequest("POST", "/accounts", { body: input })),
+    async (input, extra) => runTool(() => walletRequest("POST", "/accounts", { token: requestToken(extra), body: input })),
   );
 
   server.registerTool(
@@ -64,7 +65,8 @@ export function registerAccountTools(server: McpServer): void {
         accounts: z.array(updateAccountItem).min(1).max(10).describe("Up to 10 partial account updates, each with an id."),
       },
     },
-    async ({ accounts }) => runTool(() => walletRequest("PATCH", "/accounts", { body: accounts })),
+    async ({ accounts }, extra) =>
+      runTool(() => walletRequest("PATCH", "/accounts", { token: requestToken(extra), body: accounts })),
   );
 
   server.registerTool(
@@ -76,6 +78,7 @@ export function registerAccountTools(server: McpServer): void {
         "before attempting operations that require the account to be unreferenced.",
       inputSchema: { id: uuid.describe("Account ID to check.") },
     },
-    async ({ id }) => runTool(() => walletRequest("GET", "/accounts/references", { query: { id } })),
+    async ({ id }, extra) =>
+      runTool(() => walletRequest("GET", "/accounts/references", { token: requestToken(extra), query: { id } })),
   );
 }

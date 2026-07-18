@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { walletRequest } from "../client.js";
-import { runTool } from "../format.js";
+import { runTool, requestToken } from "../format.js";
 import { pagination, uuid } from "../schemas.js";
 
 const BUDGET_TYPES = [
@@ -47,7 +47,8 @@ export function registerBudgetTools(server: McpServer): void {
       description: "List spending budgets and their tracked limits. Supports pagination.",
       inputSchema: { ...pagination },
     },
-    async ({ limit, offset }) => runTool(() => walletRequest("GET", "/budgets", { query: { limit, offset } })),
+    async ({ limit, offset }, extra) =>
+      runTool(() => walletRequest("GET", "/budgets", { token: requestToken(extra), query: { limit, offset } })),
   );
 
   server.registerTool(
@@ -57,7 +58,7 @@ export function registerBudgetTools(server: McpServer): void {
       description: "Fetch a single budget by ID, including its current tracked spend.",
       inputSchema: { id: uuid.describe("Budget ID.") },
     },
-    async ({ id }) => runTool(() => walletRequest("GET", `/budgets/${id}`)),
+    async ({ id }, extra) => runTool(() => walletRequest("GET", `/budgets/${id}`, { token: requestToken(extra) })),
   );
 
   server.registerTool(
@@ -79,7 +80,7 @@ export function registerBudgetTools(server: McpServer): void {
         labelIds: z.array(uuid).optional().describe("Restrict tracking to records with these labels."),
       },
     },
-    async (input) => runTool(() => walletRequest("POST", "/budgets", { body: input })),
+    async (input, extra) => runTool(() => walletRequest("POST", "/budgets", { token: requestToken(extra), body: input })),
   );
 
   server.registerTool(
@@ -93,7 +94,8 @@ export function registerBudgetTools(server: McpServer): void {
         budgets: z.array(updateBudgetItem).min(1).max(10).describe("Up to 10 partial budget updates, each with an id."),
       },
     },
-    async ({ budgets }) => runTool(() => walletRequest("PATCH", "/budgets", { body: budgets })),
+    async ({ budgets }, extra) =>
+      runTool(() => walletRequest("PATCH", "/budgets", { token: requestToken(extra), body: budgets })),
   );
 
   server.registerTool(
@@ -105,6 +107,9 @@ export function registerBudgetTools(server: McpServer): void {
         ids: z.array(uuid).min(1).max(10).describe("Up to 10 budget IDs to delete."),
       },
     },
-    async ({ ids }) => runTool(() => walletRequest("DELETE", "/v1/api/budgets", { query: { id: ids.join(",") } })),
+    async ({ ids }, extra) =>
+      runTool(() =>
+        walletRequest("DELETE", "/v1/api/budgets", { token: requestToken(extra), query: { id: ids.join(",") } }),
+      ),
   );
 }

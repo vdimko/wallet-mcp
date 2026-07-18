@@ -11,16 +11,25 @@ export class WalletApiError extends Error {
   }
 }
 
-function getToken(): string {
-  const token = process.env.WALLET_API_TOKEN;
+function resolveToken(explicit: string | undefined): string {
+  const token = explicit ?? process.env.WALLET_API_TOKEN;
   if (!token) {
     throw new Error(
-      "WALLET_API_TOKEN environment variable is not set. Generate a token at " +
-        "https://web.budgetbakers.com/settings/rest-api (Wallet Premium required) " +
-        "and set it in the MCP server's environment.",
+      "No Wallet API token available. Send one via the `Authorization: Bearer <token>` header on the " +
+        "MCP request, or set WALLET_API_TOKEN in the server's environment. Generate a token at " +
+        "https://web.budgetbakers.com/settings/rest-api (Wallet Premium required).",
     );
   }
   return token;
+}
+
+/** Extracts a bearer token from an incoming MCP request's raw headers, if present. */
+export function tokenFromHeaders(headers?: Record<string, string | string[] | undefined>): string | undefined {
+  const raw = headers?.authorization;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return undefined;
+  const match = /^Bearer\s+(.+)$/i.exec(value.trim());
+  return match ? match[1] : value.trim();
 }
 
 export type QueryValue = string | number | boolean | undefined | null;
@@ -46,6 +55,8 @@ export function buildQuery(params: Record<string, QueryValue | QueryValue[]>): s
 export interface RequestOptions {
   query?: Record<string, QueryValue | QueryValue[]>;
   body?: unknown;
+  /** Wallet API token for this call; falls back to WALLET_API_TOKEN if omitted. */
+  token?: string;
 }
 
 export interface WalletResponse<T> {
@@ -65,7 +76,7 @@ export async function walletRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<WalletResponse<T>> {
-  const token = getToken();
+  const token = resolveToken(options.token);
   const url = `${BASE_URL}${path}${options.query ? buildQuery(options.query) : ""}`;
 
   const res = await fetch(url, {

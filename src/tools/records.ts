@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { walletRequest } from "../client.js";
-import { runTool } from "../format.js";
+import { runTool, requestToken } from "../format.js";
 import { pagination, numericFilter, dateFilter, textFilter, toFilterArray, uuid } from "../schemas.js";
 
 const PAYMENT_TYPES = [
@@ -79,9 +79,10 @@ export function registerRecordTools(server: McpServer): void {
         payee: textFilter,
       },
     },
-    async ({ limit, offset, amount, recordDate, note, payee }) =>
+    async ({ limit, offset, amount, recordDate, note, payee }, extra) =>
       runTool(() =>
         walletRequest("GET", "/records", {
+          token: requestToken(extra),
           query: {
             limit,
             offset,
@@ -106,7 +107,8 @@ export function registerRecordTools(server: McpServer): void {
         records: z.array(createRecordItem).min(1).max(20).describe("Up to 20 records to create."),
       },
     },
-    async ({ records }) => runTool(() => walletRequest("POST", "/records", { body: records })),
+    async ({ records }, extra) =>
+      runTool(() => walletRequest("POST", "/records", { token: requestToken(extra), body: records })),
   );
 
   server.registerTool(
@@ -121,7 +123,8 @@ export function registerRecordTools(server: McpServer): void {
         records: z.array(updateRecordItem).min(1).max(10).describe("Up to 10 partial record updates, each with an id."),
       },
     },
-    async ({ records }) => runTool(() => walletRequest("PATCH", "/records", { body: records })),
+    async ({ records }, extra) =>
+      runTool(() => walletRequest("PATCH", "/records", { token: requestToken(extra), body: records })),
   );
 
   server.registerTool(
@@ -136,7 +139,9 @@ export function registerRecordTools(server: McpServer): void {
         ids: z.array(uuid).min(1).max(10).describe("Up to 10 record IDs to delete."),
       },
     },
-    async ({ ids }) =>
-      runTool(() => walletRequest("DELETE", "/v1/api/records", { query: { id: ids.join(",") } })),
+    async ({ ids }, extra) =>
+      runTool(() =>
+        walletRequest("DELETE", "/v1/api/records", { token: requestToken(extra), query: { id: ids.join(",") } }),
+      ),
   );
 }

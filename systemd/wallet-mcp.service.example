@@ -1,0 +1,21 @@
+[Unit]
+Description=wallet-mcp — Streamable HTTP MCP server for the BudgetBakers Wallet API (localhost only)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/absolute/path/to/wallet-mcp
+ExecStart=/usr/bin/node /absolute/path/to/wallet-mcp/dist/index.js
+Environment=WALLET_MCP_HOST=127.0.0.1
+Environment=WALLET_MCP_PORT=7691
+# Optional fixed fallback token, only used when a request has no Authorization header:
+# Environment=WALLET_API_TOKEN=your_token_here
+Restart=always
+RestartSec=3
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=default.target
