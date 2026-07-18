@@ -6,16 +6,26 @@ import { registerRecordTools } from "./tools/records.js";
 import { registerAccountTools } from "./tools/accounts.js";
 import { registerCategoryTools } from "./tools/categories.js";
 import { registerBudgetTools } from "./tools/budgets.js";
+import { registerLabelTools } from "./tools/labels.js";
+import { registerStandingOrderTools } from "./tools/standing-orders.js";
+import { registerGoalTools } from "./tools/goals.js";
+import { registerRecordRuleTools } from "./tools/record-rules.js";
+import { registerApiUsageTools } from "./tools/api-usage.js";
 
 const HOST = process.env.WALLET_MCP_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.WALLET_MCP_PORT ?? 7691);
 
 function buildServer(): McpServer {
-  const server = new McpServer({ name: "wallet-mcp", version: "0.1.0", title: "BudgetBakers Wallet" });
+  const server = new McpServer({ name: "wallet-mcp", version: "0.2.0", title: "BudgetBakers Wallet" });
   registerRecordTools(server);
   registerAccountTools(server);
   registerCategoryTools(server);
   registerBudgetTools(server);
+  registerLabelTools(server);
+  registerStandingOrderTools(server);
+  registerGoalTools(server);
+  registerRecordRuleTools(server);
+  registerApiUsageTools(server);
   return server;
 }
 

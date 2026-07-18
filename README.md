@@ -2,7 +2,7 @@
 
 An [MCP](https://modelcontextprotocol.io) server for the [BudgetBakers Wallet](https://budgetbakers.com/) REST API. Runs as a persistent HTTP service using MCP's [Streamable HTTP](https://modelcontextprotocol.io/docs/concepts/transports#streamable-http) transport — meant to be run as a long-lived background process (e.g. via systemd) that MCP clients connect to over the network, rather than a stdio subprocess a client spawns itself.
 
-Covers Records (transactions), Accounts, Categories, and Budgets. Labels have no dedicated read/write endpoints in the Wallet API, so they're only usable as `labelIds` on records/budgets.
+Covers the full Wallet API: Records (transactions), Accounts, Categories, Budgets, Labels, Standing Orders (recurring payments, read + delete only — creating/editing one requires the Wallet app), Goals (read-only), Record Rules (auto-categorization, read + delete only), and API usage stats.
 
 ## Prerequisites
 
@@ -81,26 +81,45 @@ your client's docs for where custom headers are set on an HTTP MCP server entry.
 
 | Tool | Description |
 |---|---|
-| `wallet_list_records` | List transactions, with pagination and amount/date/note/payee filters |
-| `wallet_create_records` | Create up to 20 transactions |
-| `wallet_update_records` | Patch up to 10 transactions |
+| `wallet_list_records` | List transactions — pagination + filters on account/date/category/label/note/payee/amount/type/state/source |
+| `wallet_get_record` | Get one record by ID |
+| `wallet_create_records` | Create up to 50 transactions |
+| `wallet_update_records` | Patch up to 10 transactions ($clear, place, labelIds add/remove, transfer edits) |
 | `wallet_delete_records` | Delete up to 10 transactions |
+| `wallet_record_references` | Check what references given records |
 | `wallet_list_accounts` | List accounts |
-| `wallet_get_account` | Get one account |
+| `wallet_get_account` | Get one account by ID |
 | `wallet_create_account` | Create an account |
 | `wallet_update_accounts` | Patch up to 10 accounts |
-| `wallet_account_references` | Check what references an account |
+| `wallet_delete_accounts` | Delete up to 10 accounts |
+| `wallet_account_references` | Check what references given accounts |
 | `wallet_list_categories` | List categories (system + custom) |
-| `wallet_get_category` | Get one category |
+| `wallet_get_category` | Get one category by ID |
 | `wallet_create_category` | Create a custom category |
 | `wallet_update_categories` | Patch up to 10 categories |
 | `wallet_delete_categories` | Delete up to 10 custom categories |
-| `wallet_category_references` | Check what references a category |
+| `wallet_category_references` | Check what references given categories |
 | `wallet_list_budgets` | List budgets |
-| `wallet_get_budget` | Get one budget |
+| `wallet_get_budget` | Get one budget by ID |
 | `wallet_create_budget` | Create a budget |
-| `wallet_update_budgets` | Patch up to 10 budgets |
+| `wallet_update_budgets` | Patch up to 10 budgets (limits, overrides, tracked accounts/categories/labels) |
 | `wallet_delete_budgets` | Delete up to 10 budgets |
+| `wallet_list_labels` | List labels/hashtags |
+| `wallet_get_label` | Get one label by ID |
+| `wallet_create_label` | Create a label |
+| `wallet_update_labels` | Patch up to 10 labels |
+| `wallet_delete_labels` | Delete up to 10 labels |
+| `wallet_label_references` | Check what references given labels |
+| `wallet_list_standing_orders` | List recurring payments (read-only — create/edit needs the Wallet app) |
+| `wallet_get_standing_order` | Get one standing order by ID |
+| `wallet_list_standing_order_items` | List standing-order occurrences (due/paid/dismissed history) |
+| `wallet_delete_standing_orders` | Delete up to 10 standing orders |
+| `wallet_list_goals` | List savings goals (fully read-only) |
+| `wallet_get_goal` | Get one goal by ID |
+| `wallet_list_record_rules` | List auto-categorization rules (read + delete only) |
+| `wallet_get_record_rule` | Get one record rule by ID |
+| `wallet_delete_record_rules` | Delete up to 10 record rules |
+| `wallet_api_usage_stats` | Get REST API usage stats for the calling token |
 
 ## Notes
 
