@@ -2,7 +2,11 @@
   "name": "wallet-mcp",
   "version": "0.1.0",
   "description": "Local MCP server for the BudgetBakers Wallet REST API",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "wallet-mcp": "dist/index.js"
   },
