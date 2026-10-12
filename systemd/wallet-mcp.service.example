@@ -8,14 +8,55 @@ StartLimitIntervalSec=0
 Type=simple
 WorkingDirectory=/absolute/path/to/wallet-mcp
 ExecStart=/usr/bin/node /absolute/path/to/wallet-mcp/dist/index.js
+
+# ── Secrets ──────────────────────────────────────────────────────────────
+# Never put tokens in this unit file: Environment= lines are world-readable
+# via `systemctl show` and the unit's on-disk permissions. Create a 0600 env
+# file instead:
+#
+#   install -m 600 /dev/null ~/.config/wallet-mcp.env
+#   printf 'WALLET_MCP_AUTH_TOKEN=%s\n' "$(openssl rand -hex 32)" \
+#     >> ~/.config/wallet-mcp.env          # required access secret
+#   # optional — lets the server hold your Wallet API token so clients only
+#   # need the access secret:
+#   # printf 'WALLET_API_TOKEN=%s\n' '<token from web.budgetbakers.com/settings/rest-api>' \
+#   #   >> ~/.config/wallet-mcp.env
+#   # optional — refuse every mutating Wallet API call:
+#   # printf 'WALLET_MCP_READONLY=1\n' >> ~/.config/wallet-mcp.env
+EnvironmentFile=%h/.config/wallet-mcp.env
+
+# Loopback only. Changing the host moves the endpoint onto the network, where
+# the access token is the only gate — don't, unless you put it behind a
+# firewall/VPN.
 Environment=WALLET_MCP_HOST=127.0.0.1
 Environment=WALLET_MCP_PORT=7691
-# Optional fixed fallback token, only used when a request has no Authorization header:
-# Environment=WALLET_API_TOKEN=your_token_here
+
 Restart=always
 RestartSec=3
 KillMode=mixed
 KillSignal=SIGTERM
+
+# ── Hardening ────────────────────────────────────────────────────────────
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Deliberately NOT set: MemoryDenyWriteExecute — V8's JIT needs W+X pages.
 
 [Install]
 WantedBy=default.target

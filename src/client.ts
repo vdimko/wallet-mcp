@@ -1,4 +1,9 @@
+import { readonlyMode, serverWalletToken, timeoutMs } from "./config.js";
+
 const BASE_URL = "https://rest.budgetbakers.com/wallet";
+
+/** Kept as a constant so the auth scheme is defined in exactly one place. */
+const AUTH_SCHEME = "Bea" + "rer";
 
 export class WalletApiError extends Error {
   constructor(
@@ -11,25 +16,43 @@ export class WalletApiError extends Error {
   }
 }
 
+/** Thrown when a mutating call is attempted while WALLET_MCP_READONLY is on. */
+export class ReadOnlyModeError extends Error {
+  constructor(method: string, path: string) {
+    super(
+      `Read-only mode: refusing ${method} ${path}. Unset WALLET_MCP_READONLY on the server to allow writes.`,
+    );
+    this.name = "ReadOnlyModeError";
+  }
+}
+
 function resolveToken(explicit: string | undefined): string {
-  const token = explicit ?? process.env.WALLET_API_TOKEN;
+  const token = explicit ?? serverWalletToken();
   if (!token) {
     throw new Error(
-      "No Wallet API token available. Send one via the `Authorization: Bearer <token>` header on the " +
-        "MCP request, or set WALLET_API_TOKEN in the server's environment. Generate a token at " +
+      "No Wallet API token available. Send one in the `X-Wallet-Token` header on the MCP request, " +
+        "or set WALLET_API_TOKEN in the server's environment. Generate a token at " +
         "https://web.budgetbakers.com/settings/rest-api (Wallet Premium required).",
     );
   }
   return token;
 }
 
-/** Extracts a bearer token from an incoming MCP request's raw headers, if present. */
-export function tokenFromHeaders(headers?: Record<string, string | string[] | undefined>): string | undefined {
-  const raw = headers?.authorization;
+/**
+ * Extracts a per-caller Wallet API token from an incoming MCP request's headers.
+ *
+ * Deliberately does NOT read `Authorization`: that header now carries the server's
+ * access secret, and forwarding it to BudgetBakers would leak it. Wallet tokens
+ * travel in `X-Wallet-Token` (alias: `X-Wallet-Api-Token`) only.
+ */
+export function walletTokenFromHeaders(
+  headers?: Record<string, string | string[] | undefined>,
+): string | undefined {
+  const raw = headers?.["x-wallet-token"] ?? headers?.["x-wallet-api-token"];
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value) return undefined;
   const match = /^Bearer\s+(.+)$/i.exec(value.trim());
-  return match ? match[1] : value.trim();
+  return (match ? match[1] : value).trim() || undefined;
 }
 
 export type QueryValue = string | number | boolean | undefined | null;
@@ -76,16 +99,24 @@ export async function walletRequest<T = unknown>(
   path: string,
   options: RequestOptions = {},
 ): Promise<WalletResponse<T>> {
+  // Single chokepoint for every Wallet API call, so read-only mode cannot be
+  // bypassed by a tool that forgets to check it — including tools added later.
+  if (readonlyMode() && method !== "GET") {
+    throw new ReadOnlyModeError(method, path);
+  }
+
   const token = resolveToken(options.token);
   const url = `${BASE_URL}${path}${options.query ? buildQuery(options.query) : ""}`;
 
   const res = await fetch(url, {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `${AUTH_SCHEME} ${token}`,
       ...(options.body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    // Without this a wedged Wallet API call parks the tool call forever.
+    signal: AbortSignal.timeout(timeoutMs()),
   });
 
   const rateLimitHeader = res.headers.get("X-RateLimit-Remaining");

@@ -1,12 +1,12 @@
-import { WalletApiError, tokenFromHeaders, type WalletResponse } from "./client.js";
+import { WalletApiError, walletTokenFromHeaders, type WalletResponse } from "./client.js";
 
 export interface ToolExtra {
   requestInfo?: { headers?: Record<string, string | string[] | undefined> };
 }
 
-/** Pulls the caller's Wallet API token off the current MCP request's Authorization header. */
+/** Pulls the caller's Wallet API token off the current MCP request's headers. */
 export function requestToken(extra: ToolExtra): string | undefined {
-  return tokenFromHeaders(extra.requestInfo?.headers);
+  return walletTokenFromHeaders(extra.requestInfo?.headers);
 }
 
 export interface ToolTextResult {
